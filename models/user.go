@@ -2,6 +2,8 @@ package models
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/Massad/gin-boilerplate/db"
 	"github.com/Massad/gin-boilerplate/forms"
@@ -172,8 +174,58 @@ func (m UserModel) Register(form forms.RegisterDto) (user User, err error) {
 	return user, err
 }
 
+//Update ...
+
+// UpdateProfile updates the user's profile based on the provided UpdateProfileDto.
+func (m UserModel) UpdateProfile(userID string, form forms.UpdateProfileDto) (User, error) {
+	// Retrieve the current user data
+	user, err := m.One(userID)
+	if err != nil {
+		return user, err // Return if there was an error retrieving the user
+	}
+
+	// Initialize the query and values
+	var query string
+	values := []interface{}{}
+
+	// Check which fields need to be updated
+	updates := []string{}
+	if form.FirstName != "" {
+		user.FirstName = form.FirstName
+		updates = append(updates, "first_name = LOWER($1)")
+		values = append(values, user.FirstName)
+	}
+	if form.LastName != "" {
+		user.LastName = form.LastName
+		updates = append(updates, "last_name = LOWER($2)")
+		values = append(values, user.LastName)
+	}
+	if form.Address != "" {
+		user.Address = form.Address
+		updates = append(updates, "address = LOWER($3)")
+		values = append(values, user.Address)
+	}
+
+	// If no fields are updated, return early
+	if len(updates) == 0 {
+		return user, errors.New("no fields to update")
+	}
+
+	// Prepare the final query
+	query = fmt.Sprintf("UPDATE public.user SET %s WHERE id = $%d", strings.Join(updates, ", "), len(values)+1)
+	values = append(values, userID) // Add userID for the WHERE clause
+
+	// Execute the update statement
+	_, err = db.GetDB().Exec(query, values...)
+	if err != nil {
+		return user, err // Return if there's an error during the update
+	}
+
+	return user, nil // Return the updated user and no error
+}
+
 //One ...
-func (m UserModel) One(userID int64) (user User, err error) {
+func (m UserModel) One(userID string) (user User, err error) {
 	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name,balance FROM public.user WHERE id=$1 LIMIT 1", userID)
 	return user, err
 }

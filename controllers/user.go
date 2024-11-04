@@ -59,6 +59,26 @@ func (ctrl UserController) Register(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user})
 }
 
+//Register ...
+func (ctrl UserController) UpdateProfile(c *gin.Context) {
+	var updateForm forms.UpdateProfileDto
+	userID := getUserID(c)
+
+	if validationErr := c.ShouldBindJSON(&updateForm); validationErr != nil {
+		message := userForm.Register(validationErr)
+		c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": message})
+		return
+	}
+
+	user, err := userModel.UpdateProfile(userID, updateForm)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user})
+}
+
 //Logout ...
 func (ctrl UserController) Logout(c *gin.Context) {
 

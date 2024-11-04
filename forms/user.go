@@ -125,13 +125,20 @@ func (f UserForm) Register(err error) string {
 
 type RegisterDto struct {
 	PhoneNumber string `json:"phone_number" binding:"required"`
-	FirstName string `json:"first_name" binding:"required"`
-	LastName string `json:"last_name" binding:"required"`
-	Address string `json:"address" binding:"required"`
-	PIN string `json:"pin" binding:"required"`
+	FirstName   string `json:"first_name" binding:"required"`
+	LastName    string `json:"last_name" binding:"required"`
+	Address     string `json:"address" binding:"required"`
+	PIN         string `json:"pin" binding:"required"`
 }
+
 //LoginForm ...
 type LoginFormDto struct {
-	PhoneNumber    string `form:"phone_number" json:"phone_number" binding:"required"`
-	PIN string `form:"pin" json:"pin" binding:"required"`
+	PhoneNumber string `form:"phone_number" json:"phone_number" binding:"required"`
+	PIN         string `form:"pin" json:"pin" binding:"required"`
+}
+
+type UpdateProfileDto struct {
+	FirstName string `json:"first_name" `
+	LastName  string `json:"last_name" `
+	Address   string `json:"address" `
 }
