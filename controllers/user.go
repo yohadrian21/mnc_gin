@@ -23,7 +23,7 @@ func getUserID(c *gin.Context) (userID int64) {
 
 //Login ...
 func (ctrl UserController) Login(c *gin.Context) {
-	var loginForm forms.LoginForm
+	var loginForm forms.LoginFormDto
 
 	if validationErr := c.ShouldBindJSON(&loginForm); validationErr != nil {
 		message := userForm.Login(validationErr)
@@ -42,7 +42,7 @@ func (ctrl UserController) Login(c *gin.Context) {
 
 //Register ...
 func (ctrl UserController) Register(c *gin.Context) {
-	var registerForm forms.RegisterForm
+	var registerForm forms.RegisterDto
 
 	if validationErr := c.ShouldBindJSON(&registerForm); validationErr != nil {
 		message := userForm.Register(validationErr)

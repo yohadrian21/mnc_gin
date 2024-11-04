@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
-
+	
 	"github.com/Massad/gin-boilerplate/forms"
 	"github.com/Massad/gin-boilerplate/models"
 	"github.com/gin-gonic/gin"
@@ -74,11 +73,8 @@ func (ctl AuthController) Refresh(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
 			return
 		}
-		userID, err := strconv.ParseInt(fmt.Sprintf("%.f", claims["user_id"]), 10, 64)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
-			return
-		}
+		userID:= fmt.Sprintf("%.f", claims["user_id"])
+		
 		//Delete the previous Refresh Token
 		deleted, delErr := authModel.DeleteAuth(refreshUUID)
 		if delErr != nil || deleted == 0 { //if any goes wrong
