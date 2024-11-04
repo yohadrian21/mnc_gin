@@ -149,23 +149,33 @@ CREATE SEQUENCE user_id_seq
     NO MINVALUE
     NO MAXVALUE
     CACHE 1;
+-- public.transactions definition
 
-CREATE TABLE transactions (
-    id character varying ,
-    user_id character varying REFERENCES "user"(id),
-    type VARCHAR NOT NULL,
-    amount DECIMAL(15,2) NOT NULL,
-    balance_before DECIMAL(15,2) NOT NULL,
-    balance_after DECIMAL(15,2) NOT NULL,
-    remarks TEXT,
-    status VARCHAR NOT NULL,
-    payment_id character varying,
-    top_up_id  character varying,
-    transfer_id character varying,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- Drop table
+
+-- DROP TABLE public.transactions;
+
+CREATE TABLE public.transactions (
+	id varchar NULL,
+	user_id varchar NULL,
+	"type" varchar NOT NULL,
+	amount numeric(15, 2) NOT NULL,
+	balance_before numeric(15, 2) NOT NULL,
+	balance_after numeric(15, 2) NOT NULL,
+	remarks text NULL,
+	status varchar NOT NULL,
+	created_at timestamptz NULL DEFAULT CURRENT_TIMESTAMP,
+	payment_id varchar NULL,
+	top_up_id varchar NULL,
+	transfer_id varchar NULL
 );
 
-ALTER TABLE "transactions" OWNER TO postgres;
+
+-- public.transactions foreign keys
+
+ALTER TABLE transactions ADD CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id);
+ALTER TABLE transactions OWNER TO postgres;
+
 ALTER TABLE user_id_seq OWNER TO postgres;
 
 --

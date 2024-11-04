@@ -102,6 +102,11 @@ func main() {
 
 		//Refresh the token when needed to generate new access_token and refresh_token for the user
 		v1.POST("/token/refresh", auth.Refresh)
+		transaction := new(controllers.TransactionController)
+		v1.POST("/topup", TokenAuthMiddleware(), transaction.CreateTopUpTransaction)
+		v1.POST("/payment", TokenAuthMiddleware(), transaction.CreatePaymentTransaction)
+		v1.POST("/transfer", TokenAuthMiddleware(), transaction.CreateTransferTransaction)
+		v1.GET("/transactions", TokenAuthMiddleware(), transaction.All)
 
 		/*** START Article ***/
 		// article := new(controllers.ArticleController)

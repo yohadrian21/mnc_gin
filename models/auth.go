@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -156,13 +155,13 @@ func (m AuthModel) ExtractTokenMetadata(r *http.Request) (*AccessDetails, error)
 }
 
 //FetchAuth ...
-func (m AuthModel) FetchAuth(authD *AccessDetails) (int64, error) {
+func (m AuthModel) FetchAuth(authD *AccessDetails) (string, error) {
 	userid, err := db.GetRedis().Get(authD.AccessUUID).Result()
 	if err != nil {
-		return 0, err
+		return "", err
 	}
-	userID, _ := strconv.ParseInt(userid, 10, 64)
-	return userID, nil
+	// userID, _ := strconv.ParseInt(userid, 10, 64)
+	return userid, nil
 }
 
 //DeleteAuth ...
