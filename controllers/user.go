@@ -16,9 +16,9 @@ var userModel = new(models.UserModel)
 var userForm = new(forms.UserForm)
 
 //getUserID ...
-func getUserID(c *gin.Context) (userID int64) {
+func getUserID(c *gin.Context) (userID string) {
 	//MustGet returns the value for the given key if it exists, otherwise it panics.
-	return c.MustGet("userID").(int64)
+	return c.MustGet("userID").(string)
 }
 
 //Login ...

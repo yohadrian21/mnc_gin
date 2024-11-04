@@ -26,7 +26,7 @@ type TokenDetails struct {
 //AccessDetails ...
 type AccessDetails struct {
 	AccessUUID string
-	UserID     int64
+	UserID     string
 }
 
 //Token ...
@@ -142,10 +142,11 @@ func (m AuthModel) ExtractTokenMetadata(r *http.Request) (*AccessDetails, error)
 		if !ok {
 			return nil, err
 		}
-		userID, err := strconv.ParseInt(fmt.Sprintf("%.f", claims["user_id"]), 10, 64)
-		if err != nil {
-			return nil, err
-		}
+		// userID, err := strconv.ParseInt(fmt.Sprintf("%.f", claims["user_id"]), 10, 64)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		userID := fmt.Sprintf("%.f", claims["user_id"])
 		return &AccessDetails{
 			AccessUUID: accessUUID,
 			UserID:     userID,

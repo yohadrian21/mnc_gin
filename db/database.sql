@@ -131,6 +131,7 @@ CREATE TABLE "user" (
     first_name character varying,
     last_name character varying,
     address character varying,
+    balance DECIMAL(15,2) NOT NULL,
     updated_at integer,
     created_at integer
 );
@@ -149,7 +150,22 @@ CREATE SEQUENCE user_id_seq
     NO MAXVALUE
     CACHE 1;
 
+CREATE TABLE transactions (
+    id character varying ,
+    user_id character varying REFERENCES "user"(id),
+    type VARCHAR NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    balance_before DECIMAL(15,2) NOT NULL,
+    balance_after DECIMAL(15,2) NOT NULL,
+    remarks TEXT,
+    status VARCHAR NOT NULL,
+    payment_id character varying,
+    top_up_id  character varying,
+    transfer_id character varying,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
+ALTER TABLE "transactions" OWNER TO postgres;
 ALTER TABLE user_id_seq OWNER TO postgres;
 
 --

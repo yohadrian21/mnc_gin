@@ -5,7 +5,7 @@ import (
 
 	"github.com/Massad/gin-boilerplate/db"
 	"github.com/Massad/gin-boilerplate/forms"
-"github.com/google/uuid" // Import the UUID package
+	"github.com/google/uuid" // Import the UUID package
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -20,14 +20,15 @@ import (
 // 	PIN string `db:"email" json:"email"`
 // }
 type User struct {
-	ID          string `db:"id, primarykey" json:"id"` // Changed to string for UUID
-	PhoneNumber     string `db:"phone_number" json:"phone_number"`
-	FirstName  string `db:"first_name" json:"first_name"`
-	LastName      string `db:"last_name" json:"last_name"`
-	Address      string `db:"address" json:"address"`
-	UpdatedAt int64  `db:"updated_at" json:"-"`
-	CreatedAt int64  `db:"created_at" json:"-"`
-	PIN string `db:"pin" json:"PIN"`
+	ID          string  `db:"id, primarykey" json:"id"` // Changed to string for UUID
+	PhoneNumber string  `db:"phone_number" json:"phone_number"`
+	FirstName   string  `db:"first_name" json:"first_name"`
+	LastName    string  `db:"last_name" json:"last_name"`
+	Address     string  `db:"address" json:"address"`
+	UpdatedAt   int64   `db:"updated_at" json:"-"`
+	CreatedAt   int64   `db:"created_at" json:"-"`
+	PIN         string  `db:"pin" json:"PIN"`
+	Balance     float64 `db:"balance" json:"-"`
 }
 
 //UserModel ...
@@ -71,7 +72,7 @@ var authModel = new(AuthModel)
 //Login ...
 func (m UserModel) Login(form forms.LoginFormDto) (user User, token Token, err error) {
 
-	err = db.GetDB().SelectOne(&user, "SELECT id, password FROM public.user WHERE phone_number=LOWER($1) LIMIT 1", form.PhoneNumber)
+	err = db.GetDB().SelectOne(&user, "SELECT id, pin FROM public.user WHERE phone_number=LOWER($1) LIMIT 1", form.PhoneNumber)
 
 	if err != nil {
 		return user, token, err
@@ -101,6 +102,7 @@ func (m UserModel) Login(form forms.LoginFormDto) (user User, token Token, err e
 
 	return user, token, nil
 }
+
 //Register ...
 // func (m UserModel) Register(form forms.RegisterForm) (user User, err error) {
 // 	getDb := db.GetDB()
@@ -169,8 +171,14 @@ func (m UserModel) Register(form forms.RegisterDto) (user User, err error) {
 
 	return user, err
 }
+
 //One ...
 func (m UserModel) One(userID int64) (user User, err error) {
-	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name FROM public.user WHERE id=$1 LIMIT 1", userID)
+	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name,balance FROM public.user WHERE id=$1 LIMIT 1", userID)
+	return user, err
+}
+
+func (m UserModel) GetUserBalance(userID int64) (user User, err error) {
+	err = db.GetDB().SelectOne(&user, "SELECT id,balance FROM public.user WHERE id=$1 LIMIT 1", userID)
 	return user, err
 }

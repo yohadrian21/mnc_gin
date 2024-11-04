@@ -104,13 +104,13 @@ func main() {
 		v1.POST("/token/refresh", auth.Refresh)
 
 		/*** START Article ***/
-		article := new(controllers.ArticleController)
+		// article := new(controllers.ArticleController)
 
-		v1.POST("/article", TokenAuthMiddleware(), article.Create)
-		v1.GET("/articles", TokenAuthMiddleware(), article.All)
-		v1.GET("/article/:id", TokenAuthMiddleware(), article.One)
-		v1.PUT("/article/:id", TokenAuthMiddleware(), article.Update)
-		v1.DELETE("/article/:id", TokenAuthMiddleware(), article.Delete)
+		// v1.POST("/article", TokenAuthMiddleware(), article.Create)
+		// v1.GET("/articles", TokenAuthMiddleware(), article.All)
+		// v1.GET("/article/:id", TokenAuthMiddleware(), article.One)
+		// v1.PUT("/article/:id", TokenAuthMiddleware(), article.Update)
+		// v1.DELETE("/article/:id", TokenAuthMiddleware(), article.Delete)
 	}
 
 	r.LoadHTMLGlob("./public/html/*")
