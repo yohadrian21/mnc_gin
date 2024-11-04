@@ -125,10 +125,12 @@ ALTER SEQUENCE article_id_seq OWNED BY article.id;
 --
 
 CREATE TABLE "user" (
-    id integer NOT NULL,
-    email character varying,
-    password character varying,
-    name character varying,
+    id character varying,
+    phone_number character varying,
+    pin character varying,
+    first_name character varying,
+    last_name character varying,
+    address character varying,
     updated_at integer,
     created_at integer
 );
