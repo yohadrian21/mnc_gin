@@ -2,15 +2,22 @@ package models
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/Massad/gin-boilerplate/db"
 	"github.com/Massad/gin-boilerplate/forms"
 
+	"github.com/go-gorp/gorp"
 	uuid "github.com/google/uuid"
 )
+
+// ErrInsufficientBalance is returned when a debit would make the balance negative.
+var ErrInsufficientBalance = errors.New("insufficient balance")
+
+// ErrInvalidAmount is returned when the amount is zero or negative.
+var ErrInvalidAmount = errors.New("amount must be greater than zero")
 
 //Transaction ...
 
@@ -37,89 +44,146 @@ func (m TransactionModel) Create(userID string, form forms.CreateTransactioForm)
 	return transactionID, err
 }
 
-//Create ...
+const insertTransactionSQL = "INSERT INTO public.transactions(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id"
+
+// lockBalance reads a user's balance inside tx and locks the row (SELECT ... FOR UPDATE)
+// so concurrent requests on the same wallet are serialized until tx commits or rolls back.
+func lockBalance(tx *gorp.Transaction, userID string) (float64, error) {
+	var balance float64
+	if err := tx.SelectOne(&balance, "SELECT balance FROM public.user WHERE id=$1 FOR UPDATE", userID); err != nil {
+		return 0, fmt.Errorf("fetching balance for user %s: %w", userID, err)
+	}
+	return balance, nil
+}
+
+// applyBalanceChange writes the ledger row and the new balance for one user inside tx.
+func applyBalanceChange(tx *gorp.Transaction, transactionID, userID string, form forms.CreateTransactioForm) error {
+	if err := tx.QueryRow(insertTransactionSQL, transactionID, userID, form.Type, form.Amount, form.BalanceBefore, form.BalanceAfter, form.Remarks, form.Status, form.CreatedAt, form.TopUpID, form.PaymentID, form.TransferID).Scan(&transactionID); err != nil {
+		return err
+	}
+	_, err := tx.Exec("UPDATE public.user SET balance = $1, updated_at = $2 WHERE id = $3", form.BalanceAfter, time.Now().Unix(), userID)
+	return err
+}
+
+// withTx runs fn in a DB transaction, committing on success and rolling back on error.
+func withTx(fn func(tx *gorp.Transaction) error) error {
+	tx, err := db.GetDB().Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+//CreateTopUp credits the user's balance atomically.
 func (m TransactionModel) CreateTopUp(userID string, form forms.CreateTransactioForm) (transactionID string, err error) {
-
-	err = db.GetDB().SelectOne(&form.BalanceBefore, "SELECT balance FROM public.user WHERE id=$1 LIMIT 1", userID)
-	if err != nil {
-		log.Fatalf("Error fetching user balance: %v", err)
+	if form.Amount <= 0 {
+		return "", ErrInvalidAmount
 	}
 	transactionID = uuid.New().String()
-
-	form.BalanceAfter = form.BalanceBefore + form.Amount
-	form.CreatedAt = time.Now()
-	form.Status = "SUCCESS"
-	form.Type = "CREDIT"
-	err = db.GetDB().QueryRow("INSERT INTO public.transactions(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id", transactionID, userID, form.Type, form.Amount, form.BalanceBefore, form.BalanceAfter, form.Remarks, form.Status, form.CreatedAt, form.TopUpID, form.PaymentID, form.TransferID).Scan(&transactionID)
-	_, err = db.GetDB().Exec("UPDATE public.user SET balance = $1, updated_at = $2 WHERE id = $3", form.BalanceAfter, time.Now().Unix(), userID)
+	err = withTx(func(tx *gorp.Transaction) error {
+		balance, err := lockBalance(tx, userID)
+		if err != nil {
+			return err
+		}
+		form.BalanceBefore = balance
+		form.BalanceAfter = balance + form.Amount
+		form.CreatedAt = time.Now()
+		form.Status = "SUCCESS"
+		form.Type = "CREDIT"
+		return applyBalanceChange(tx, transactionID, userID, form)
+	})
 	if err != nil {
-		// Handle the error appropriately
 		return "", err
 	}
-	return transactionID, err
+	return transactionID, nil
 }
 
-//Create ...
+//CreatePayment debits the user's balance atomically; fails if the balance is insufficient.
 func (m TransactionModel) CreatePayment(userID string, form forms.CreateTransactioForm) (transactionID string, err error) {
-
-	err = db.GetDB().SelectOne(&form.BalanceBefore, "SELECT balance FROM public.user WHERE id=$1 LIMIT 1", userID)
-	if err != nil {
-		log.Fatalf("Error fetching user balance: %v", err)
+	if form.Amount <= 0 {
+		return "", ErrInvalidAmount
 	}
 	transactionID = uuid.New().String()
-
-	form.BalanceAfter = form.BalanceBefore - form.Amount
-	form.CreatedAt = time.Now()
-	form.Status = "SUCCESS"
-	form.Type = "DEBIT"
-	err = db.GetDB().QueryRow("INSERT INTO public.transactions(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id", transactionID, userID, form.Type, form.Amount, form.BalanceBefore, form.BalanceAfter, form.Remarks, form.Status, form.CreatedAt, form.TopUpID, form.PaymentID, form.TransferID).Scan(&transactionID)
-	_, err = db.GetDB().Exec("UPDATE public.user SET balance = $1, updated_at = $2 WHERE id = $3", form.BalanceAfter, time.Now().Unix(), userID)
+	err = withTx(func(tx *gorp.Transaction) error {
+		balance, err := lockBalance(tx, userID)
+		if err != nil {
+			return err
+		}
+		if balance < form.Amount {
+			return ErrInsufficientBalance
+		}
+		form.BalanceBefore = balance
+		form.BalanceAfter = balance - form.Amount
+		form.CreatedAt = time.Now()
+		form.Status = "SUCCESS"
+		form.Type = "DEBIT"
+		return applyBalanceChange(tx, transactionID, userID, form)
+	})
 	if err != nil {
-		// Handle the error appropriately
 		return "", err
 	}
-	return transactionID, err
+	return transactionID, nil
 }
 
-//Create ...
+//CreateTransfer moves funds between two users in one DB transaction.
+//Both rows are locked in a fixed order (by id) so opposite transfers can't deadlock.
 func (m TransactionModel) CreateTransfer(userID string, targetUserID string, form forms.CreateTransactioForm) (transactionID string, err error) {
-
-	//userID
-	err = db.GetDB().SelectOne(&form.BalanceBefore, "SELECT balance FROM public.user WHERE id=$1 LIMIT 1", userID)
-	if err != nil {
-		log.Fatalf("Error fetching user balance: %v", err)
+	if form.Amount <= 0 {
+		return "", ErrInvalidAmount
 	}
-	transactionID = uuid.New().String()
+	if userID == targetUserID {
+		return "", errors.New("cannot transfer to the same user")
+	}
+	debitID := uuid.New().String()
+	creditID := uuid.New().String()
+	err = withTx(func(tx *gorp.Transaction) error {
+		balances := map[string]float64{}
+		first, second := userID, targetUserID
+		if second < first {
+			first, second = second, first
+		}
+		for _, id := range []string{first, second} {
+			b, err := lockBalance(tx, id)
+			if err != nil {
+				return err
+			}
+			balances[id] = b
+		}
+		if balances[userID] < form.Amount {
+			return ErrInsufficientBalance
+		}
+		now := time.Now()
 
-	form.BalanceAfter = form.BalanceBefore - form.Amount
-	form.CreatedAt = time.Now()
-	form.Status = "SUCCESS"
-	form.Type = "DEBIT"
-	err = db.GetDB().QueryRow("INSERT INTO public.transactions(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id", transactionID, userID, form.Type, form.Amount, form.BalanceBefore, form.BalanceAfter, form.Remarks, form.Status, form.CreatedAt, form.PaymentID, form.PaymentID, form.TransferID).Scan(&transactionID)
-	_, err = db.GetDB().Exec("UPDATE public.user SET balance = $1, updated_at = $2 WHERE id = $3", form.BalanceAfter, time.Now().Unix(), userID)
+		debit := form
+		debit.BalanceBefore = balances[userID]
+		debit.BalanceAfter = balances[userID] - form.Amount
+		debit.CreatedAt = now
+		debit.Status = "SUCCESS"
+		debit.Type = "DEBIT"
+		if err := applyBalanceChange(tx, debitID, userID, debit); err != nil {
+			return err
+		}
+
+		credit := forms.CreateTransactioForm{
+			Amount:        form.Amount,
+			TransferID:    form.TransferID,
+			Remarks:       form.Remarks,
+			BalanceBefore: balances[targetUserID],
+			BalanceAfter:  balances[targetUserID] + form.Amount,
+			CreatedAt:     now,
+			Status:        "SUCCESS",
+			Type:          "CREDIT",
+		}
+		return applyBalanceChange(tx, creditID, targetUserID, credit)
+	})
 	if err != nil {
-		// Handle the error appropriately
 		return "", err
 	}
-	//target User Id
-	formTarget := new(forms.CreateTransactioForm)
-	err = db.GetDB().SelectOne(&formTarget.BalanceBefore, "SELECT balance FROM public.user WHERE id=$1 LIMIT 1", targetUserID)
-	if err != nil {
-		log.Fatalf("Error fetching user balance: %v", err)
-	}
-	transactionID = uuid.New().String()
-
-	formTarget.BalanceAfter = formTarget.BalanceBefore + form.Amount
-	formTarget.CreatedAt = time.Now()
-	formTarget.Status = "SUCCESS"
-	formTarget.Type = "CREDIT"
-	err = db.GetDB().QueryRow("INSERT INTO public.transactions(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id", transactionID, targetUserID, formTarget.Type, formTarget.Amount, formTarget.BalanceBefore, formTarget.BalanceAfter, formTarget.Remarks, formTarget.Status, formTarget.CreatedAt, formTarget.TopUpID, formTarget.PaymentID, formTarget.TransferID).Scan(&transactionID)
-	_, err = db.GetDB().Exec("UPDATE public.user SET balance = $1, updated_at = $2 WHERE id = $3", formTarget.BalanceAfter, time.Now().Unix(), targetUserID)
-	if err != nil {
-		// Handle the error appropriately
-		return "", err
-	}
-	return transactionID, err
+	return debitID, nil
 }
 
 // //One ...
