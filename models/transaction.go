@@ -36,14 +36,6 @@ type Transaction struct {
 //TransactionModel ...
 type TransactionModel struct{}
 
-//Create ...
-func (m TransactionModel) Create(userID string, form forms.CreateTransactioForm) (transactionID string, err error) {
-	// Generate a UUID for the user ID
-	transactionID = uuid.New().String()
-	err = db.GetDB().QueryRow("INSERT INTO public.transaction(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id", transactionID, userID, form.Type, form.Amount, form.BalanceBefore, form.BalanceAfter, form.Remarks, form.Status, form.CreatedAt, form.PaymentID, form.TopUpID, form.TransferID).Scan(&transactionID)
-	return transactionID, err
-}
-
 const insertTransactionSQL = "INSERT INTO public.transactions(id,user_id, type,amount,balance_before,balance_after,remarks,status,created_at,top_up_id,payment_id,transfer_id) VALUES($1, $2, $3,$4, $5, $6,$7, $8,$9,$10,$11,$12) RETURNING id"
 
 // lockBalance reads a user's balance inside tx and locks the row (SELECT ... FOR UPDATE)
@@ -76,30 +68,6 @@ func withTx(fn func(tx *gorp.Transaction) error) error {
 		return err
 	}
 	return tx.Commit()
-}
-
-//CreateTopUp credits the user's balance atomically.
-func (m TransactionModel) CreateTopUp(userID string, form forms.CreateTransactioForm) (transactionID string, err error) {
-	if form.Amount <= 0 {
-		return "", ErrInvalidAmount
-	}
-	transactionID = uuid.New().String()
-	err = withTx(func(tx *gorp.Transaction) error {
-		balance, err := lockBalance(tx, userID)
-		if err != nil {
-			return err
-		}
-		form.BalanceBefore = balance
-		form.BalanceAfter = balance + form.Amount
-		form.CreatedAt = time.Now()
-		form.Status = "SUCCESS"
-		form.Type = "CREDIT"
-		return applyBalanceChange(tx, transactionID, userID, form)
-	})
-	if err != nil {
-		return "", err
-	}
-	return transactionID, nil
 }
 
 //CreatePayment debits the user's balance atomically; fails if the balance is insufficient.

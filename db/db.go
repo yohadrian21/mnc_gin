@@ -52,6 +52,11 @@ func GetDB() *gorp.DbMap {
 	return db
 }
 
+//SetDB replaces the database handle, e.g. with a sqlmock-backed one in tests.
+func SetDB(dbmap *gorp.DbMap) {
+	db = dbmap
+}
+
 //RedisClient ...
 var RedisClient *_redis.Client
 

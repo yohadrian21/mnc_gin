@@ -132,6 +132,7 @@ CREATE TABLE "user" (
     last_name character varying,
     address character varying,
     balance DECIMAL(15,2) NOT NULL,
+    role character varying NOT NULL DEFAULT 'USER',
     updated_at integer,
     created_at integer
 );
@@ -243,6 +244,45 @@ ALTER TABLE ONLY article
 
 ALTER TABLE ONLY "user"
     ADD CONSTRAINT user_id PRIMARY KEY (id);
+
+
+--
+-- Name: topup_audit; Type: TABLE; Schema: public; Owner: postgres
+-- Append-only record of every wallet credit attempt (applied or rejected).
+--
+
+CREATE TABLE public.topup_audit (
+	id varchar NOT NULL PRIMARY KEY,
+	user_id varchar NOT NULL,
+	amount numeric(15, 2) NOT NULL,
+	source varchar NOT NULL,
+	reference varchar NOT NULL,
+	actor varchar NOT NULL,
+	outcome varchar NOT NULL,
+	reason text NULL,
+	client_ip varchar NULL,
+	transaction_id varchar NULL,
+	created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE public.topup_audit OWNER TO postgres;
+
+CREATE UNIQUE INDEX topup_audit_applied_reference ON public.topup_audit (source, reference) WHERE outcome = 'APPLIED';
+CREATE INDEX topup_audit_user_created_at ON public.topup_audit (user_id, created_at);
+
+CREATE FUNCTION topup_audit_append_only() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+
+BEGIN
+    RAISE EXCEPTION 'topup_audit is append-only';
+END;
+
+$$;
+
+ALTER FUNCTION public.topup_audit_append_only() OWNER TO postgres;
+
+CREATE TRIGGER topup_audit_append_only BEFORE UPDATE OR DELETE ON public.topup_audit FOR EACH ROW EXECUTE PROCEDURE topup_audit_append_only();
 
 
 --
