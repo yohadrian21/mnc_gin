@@ -29,8 +29,28 @@ type User struct {
 	Address     string  `db:"address" json:"address"`
 	UpdatedAt   int64   `db:"updated_at" json:"-"`
 	CreatedAt   int64   `db:"created_at" json:"-"`
-	PIN         string  `db:"pin" json:"PIN"`
+	PIN         string  `db:"pin" json:"-"`
 	Balance     float64 `db:"balance" json:"-"`
+}
+
+//UserResponse is the user as returned by the API; it never carries the PIN hash.
+type UserResponse struct {
+	ID          string `json:"id"`
+	PhoneNumber string `json:"phone_number"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	Address     string `json:"address"`
+}
+
+//Response ...
+func (u User) Response() UserResponse {
+	return UserResponse{
+		ID:          u.ID,
+		PhoneNumber: u.PhoneNumber,
+		FirstName:   u.FirstName,
+		LastName:    u.LastName,
+		Address:     u.Address,
+	}
 }
 
 //UserModel ...
@@ -74,7 +94,7 @@ var authModel = new(AuthModel)
 //Login ...
 func (m UserModel) Login(form forms.LoginFormDto) (user User, token Token, err error) {
 
-	err = db.GetDB().SelectOne(&user, "SELECT id, pin FROM public.user WHERE phone_number=LOWER($1) LIMIT 1", form.PhoneNumber)
+	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name, last_name, address, pin FROM public.user WHERE phone_number=LOWER($1) LIMIT 1", form.PhoneNumber)
 
 	if err != nil {
 		return user, token, err
@@ -96,11 +116,11 @@ func (m UserModel) Login(form forms.LoginFormDto) (user User, token Token, err e
 		return user, token, err
 	}
 
-	saveErr := authModel.CreateAuth(user.ID, tokenDetails)
-	if saveErr == nil {
-		token.AccessToken = tokenDetails.AccessToken
-		token.RefreshToken = tokenDetails.RefreshToken
+	if err = authModel.CreateAuth(user.ID, tokenDetails); err != nil {
+		return user, token, err
 	}
+	token.AccessToken = tokenDetails.AccessToken
+	token.RefreshToken = tokenDetails.RefreshToken
 
 	return user, token, nil
 }

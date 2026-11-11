@@ -37,7 +37,7 @@ func (ctrl UserController) Login(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged in", "user": user, "token": token})
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged in", "user": user.Response(), "token": token})
 }
 
 //Register ...
@@ -56,7 +56,7 @@ func (ctrl UserController) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user})
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user.Response()})
 }
 
 //Register ...
@@ -76,7 +76,7 @@ func (ctrl UserController) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user})
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user.Response()})
 }
 
 //Logout ...
