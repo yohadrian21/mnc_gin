@@ -210,20 +210,21 @@ func (m UserModel) UpdateProfile(userID string, form forms.UpdateProfileDto) (Us
 
 	// Check which fields need to be updated
 	updates := []string{}
+	set := func(column, value string) {
+		values = append(values, value)
+		updates = append(updates, fmt.Sprintf("%s = LOWER($%d)", column, len(values)))
+	}
 	if form.FirstName != "" {
 		user.FirstName = form.FirstName
-		updates = append(updates, "first_name = LOWER($1)")
-		values = append(values, user.FirstName)
+		set("first_name", user.FirstName)
 	}
 	if form.LastName != "" {
 		user.LastName = form.LastName
-		updates = append(updates, "last_name = LOWER($2)")
-		values = append(values, user.LastName)
+		set("last_name", user.LastName)
 	}
 	if form.Address != "" {
 		user.Address = form.Address
-		updates = append(updates, "address = LOWER($3)")
-		values = append(values, user.Address)
+		set("address", user.Address)
 	}
 
 	// If no fields are updated, return early
@@ -246,7 +247,7 @@ func (m UserModel) UpdateProfile(userID string, form forms.UpdateProfileDto) (Us
 
 //One ...
 func (m UserModel) One(userID string) (user User, err error) {
-	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name,balance FROM public.user WHERE id=$1 LIMIT 1", userID)
+	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name, last_name, address, balance FROM public.user WHERE id=$1 LIMIT 1", userID)
 	return user, err
 }
 

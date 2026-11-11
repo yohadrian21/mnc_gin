@@ -59,7 +59,7 @@ func (ctrl UserController) Register(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user.Response()})
 }
 
-//Register ...
+//UpdateProfile ...
 func (ctrl UserController) UpdateProfile(c *gin.Context) {
 	var updateForm forms.UpdateProfileDto
 	userID := getUserID(c)
@@ -76,7 +76,7 @@ func (ctrl UserController) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully registered", "user": user.Response()})
+	c.JSON(http.StatusOK, gin.H{"message": "Profile updated", "user": user.Response()})
 }
 
 //Logout ...

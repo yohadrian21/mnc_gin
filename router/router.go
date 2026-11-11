@@ -73,7 +73,7 @@ func New() (*gin.Engine, error) {
 		v1.POST("/login", user.Login)
 		v1.POST("/register", user.Register)
 		v1.GET("/user/logout", user.Logout)
-		v1.PUT("/profile", user.Register)
+		v1.PUT("/profile", TokenAuthMiddleware(), user.UpdateProfile)
 
 		/*** START AUTH ***/
 		auth := new(controllers.AuthController)
