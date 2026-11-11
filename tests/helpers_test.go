@@ -59,8 +59,15 @@ func newTestEnv(t *testing.T) *testEnv {
 	return &testEnv{router: r, sql: mock, redis: mr}
 }
 
+const testClientAddr = "192.0.2.1:41000"
+
 func (e *testEnv) request(method, path, body string, header http.Header) *httptest.ResponseRecorder {
+	return e.requestFrom(testClientAddr, method, path, body, header)
+}
+
+func (e *testEnv) requestFrom(remoteAddr, method, path, body string, header http.Header) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.RemoteAddr = remoteAddr
 	req.Header.Set("Content-Type", "application/json")
 	for key, values := range header {
 		req.Header[key] = values

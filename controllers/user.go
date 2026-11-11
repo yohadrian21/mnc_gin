@@ -4,7 +4,10 @@ import (
 	"github.com/Massad/gin-boilerplate/forms"
 	"github.com/Massad/gin-boilerplate/models"
 
+	"log"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,6 +17,7 @@ type UserController struct{}
 
 var userModel = new(models.UserModel)
 var userForm = new(forms.UserForm)
+var loginLimiter = models.DefaultLoginLimiter
 
 //getUserID ...
 func getUserID(c *gin.Context) (userID string) {
@@ -31,10 +35,25 @@ func (ctrl UserController) Login(c *gin.Context) {
 		return
 	}
 
+	retryAfter, err := loginLimiter.Reserve(loginForm.PhoneNumber, c.ClientIP())
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"message": "Something went wrong, please try again later"})
+		return
+	}
+	if retryAfter > 0 {
+		c.Header("Retry-After", strconv.Itoa(int(retryAfter/time.Second)))
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"message": "Too many login attempts, please try again later"})
+		return
+	}
+
 	user, token, err := userModel.Login(loginForm)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": "Invalid login details"})
 		return
+	}
+
+	if err := loginLimiter.Succeeded(loginForm.PhoneNumber, c.ClientIP()); err != nil {
+		log.Printf("login limiter: could not reset attempts after a successful login: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged in", "user": user.Response(), "token": token})

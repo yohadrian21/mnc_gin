@@ -133,7 +133,7 @@ type RegisterDto struct {
 
 //LoginForm ...
 type LoginFormDto struct {
-	PhoneNumber string `form:"phone_number" json:"phone_number" binding:"required"`
+	PhoneNumber string `form:"phone_number" json:"phone_number" binding:"required,max=32"`
 	PIN         string `form:"pin" json:"pin" binding:"required"`
 }
 

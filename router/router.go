@@ -2,6 +2,8 @@ package router
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/Massad/gin-boilerplate/controllers"
 	"github.com/Massad/gin-boilerplate/forms"
@@ -58,6 +60,12 @@ func New() (*gin.Engine, error) {
 	//Start the default gin server
 	r := gin.Default()
 
+	//Gin trusts X-Forwarded-For from any peer by default, which would let clients pick the IP the
+	//login limiter sees. Only the proxies listed in TRUSTED_PROXIES (comma-separated) are trusted.
+	if err := r.SetTrustedProxies(splitList(os.Getenv("TRUSTED_PROXIES"))); err != nil {
+		return nil, fmt.Errorf("TRUSTED_PROXIES: %w", err)
+	}
+
 	//Custom form validator
 	binding.Validator = new(forms.DefaultValidator)
 
@@ -97,4 +105,14 @@ func New() (*gin.Engine, error) {
 	}
 
 	return r, nil
+}
+
+func splitList(raw string) []string {
+	var items []string
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
