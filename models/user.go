@@ -251,6 +251,21 @@ func (m UserModel) One(userID string) (user User, err error) {
 	return user, err
 }
 
+//RoleAdmin is the user.role value allowed to call admin routes.
+const RoleAdmin = "ADMIN"
+
+//IsAdmin ...
+func (m UserModel) IsAdmin(userID string) (bool, error) {
+	if userID == "" {
+		return false, nil
+	}
+	role, err := db.GetDB().SelectStr("SELECT role FROM public.user WHERE id=$1", userID)
+	if err != nil {
+		return false, err
+	}
+	return role == RoleAdmin, nil
+}
+
 func (m UserModel) GetUserBalance(userID int64) (user User, err error) {
 	err = db.GetDB().SelectOne(&user, "SELECT id,balance FROM public.user WHERE id=$1 LIMIT 1", userID)
 	return user, err

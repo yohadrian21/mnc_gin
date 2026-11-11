@@ -37,6 +37,16 @@ func (ctl AuthController) TokenValid(c *gin.Context) {
 	c.Set("userID", userID)
 }
 
+//RequireAdmin ...
+//Runs after TokenValid. The role is read from the database on each request, so revoking it takes effect immediately.
+func (ctl AuthController) RequireAdmin(c *gin.Context) {
+	isAdmin, err := userModel.IsAdmin(c.GetString("userID"))
+	if err != nil || !isAdmin {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"message": "Forbidden"})
+		return
+	}
+}
+
 //Refresh ...
 func (ctl AuthController) Refresh(c *gin.Context) {
 	var tokenForm forms.Token

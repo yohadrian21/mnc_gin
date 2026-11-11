@@ -43,7 +43,8 @@ const minSecretLength = 32
 //placeholderSecretPrefix marks the sample values in .env_copy.
 const placeholderSecretPrefix = "CHANGE_ME"
 
-//ValidateSecrets refuses missing, placeholder, short or shared JWT signing secrets.
+//ValidateSecrets refuses missing, placeholder, short or shared JWT signing secrets, and a weak
+//PAYMENT_WEBHOOK_SECRET when one is set.
 func ValidateSecrets() error {
 	access, refresh := os.Getenv("ACCESS_SECRET"), os.Getenv("REFRESH_SECRET")
 	if err := checkSecret("ACCESS_SECRET", access); err != nil {
@@ -54,6 +55,9 @@ func ValidateSecrets() error {
 	}
 	if access == refresh {
 		return errors.New("ACCESS_SECRET and REFRESH_SECRET must be different")
+	}
+	if webhook := os.Getenv("PAYMENT_WEBHOOK_SECRET"); webhook != "" {
+		return checkSecret("PAYMENT_WEBHOOK_SECRET", webhook)
 	}
 	return nil
 }

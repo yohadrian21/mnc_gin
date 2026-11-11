@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +22,11 @@ import (
 const (
 	testAccessSecret  = "test-only-access-secret-not-for-production-use"
 	testRefreshSecret = "test-only-refresh-secret-not-for-production-use"
+	testWebhookSecret = "test-only-webhook-secret-not-for-production-use"
 	testUserID        = "6f1c2a8e-8a59-4d1b-9a43-3c1f0d7f2b10"
+
+	testMaxTopUp       = 1000000.0
+	testMaxTopUpPerDay = 1500000.0
 )
 
 var testAuthModel = new(models.AuthModel)
@@ -40,6 +45,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	gin.SetMode(gin.TestMode)
 	t.Setenv("ACCESS_SECRET", testAccessSecret)
 	t.Setenv("REFRESH_SECRET", testRefreshSecret)
+	t.Setenv("PAYMENT_WEBHOOK_SECRET", testWebhookSecret)
+	t.Setenv("TOPUP_MAX_PER_TRANSACTION", fmt.Sprint(testMaxTopUp))
+	t.Setenv("TOPUP_MAX_PER_DAY", fmt.Sprint(testMaxTopUpPerDay))
 
 	sqlDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -59,7 +67,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	return &testEnv{router: r, sql: mock, redis: mr}
 }
 
-const testClientAddr = "192.0.2.1:41000"
+const (
+	testClientIP   = "192.0.2.1"
+	testClientAddr = testClientIP + ":41000"
+)
 
 func (e *testEnv) request(method, path, body string, header http.Header) *httptest.ResponseRecorder {
 	return e.requestFrom(testClientAddr, method, path, body, header)

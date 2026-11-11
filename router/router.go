@@ -55,6 +55,15 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 	}
 }
 
+//AdminMiddleware ...
+//Only lets users with the ADMIN role through; chain it after TokenAuthMiddleware
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		auth.RequireAdmin(c)
+		c.Next()
+	}
+}
+
 //New builds the engine with the global middleware and every /v1 route.
 func New() (*gin.Engine, error) {
 	//Start the default gin server
@@ -89,10 +98,14 @@ func New() (*gin.Engine, error) {
 		//Refresh the token when needed to generate new access_token and refresh_token for the user
 		v1.POST("/token/refresh", auth.Refresh)
 		transaction := new(controllers.TransactionController)
-		v1.POST("/topup", TokenAuthMiddleware(), transaction.CreateTopUpTransaction)
 		v1.POST("/payment", TokenAuthMiddleware(), transaction.CreatePaymentTransaction)
 		v1.POST("/transfer", TokenAuthMiddleware(), transaction.CreateTransferTransaction)
 		v1.GET("/transactions", TokenAuthMiddleware(), transaction.All)
+
+		//There is deliberately no self-service top-up: wallets are only credited by the payment
+		//provider's signed webhook or by an admin.
+		v1.POST("/webhooks/topup", transaction.TopUpWebhook)
+		v1.POST("/admin/topup", TokenAuthMiddleware(), AdminMiddleware(), transaction.AdminTopUp)
 
 		/*** START Article ***/
 		// article := new(controllers.ArticleController)

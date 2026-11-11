@@ -24,6 +24,12 @@ func main() {
 	if err := models.ValidateSecrets(); err != nil {
 		log.Fatal("error: ", err)
 	}
+	if _, err := models.LoadTopUpLimits(); err != nil {
+		log.Fatal("error: ", err)
+	}
+	if os.Getenv("PAYMENT_WEBHOOK_SECRET") == "" {
+		log.Println("warning: PAYMENT_WEBHOOK_SECRET is not set; POST /v1/webhooks/topup rejects every delivery")
+	}
 
 	if os.Getenv("ENV") == "PRODUCTION" {
 		gin.SetMode(gin.ReleaseMode)

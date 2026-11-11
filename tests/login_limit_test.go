@@ -117,7 +117,7 @@ func TestSuccessfulLoginClearsPhoneFailures(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	assert.False(t, env.redis.Exists("login_attempts:phone:"+testPhone))
-	ipFailures, err := env.redis.Get("login_attempts:ip:192.0.2.1")
+	ipFailures, err := env.redis.Get("login_attempts:ip:" + testClientIP)
 	require.NoError(t, err)
 	assert.Equal(t, fmt.Sprint(models.DefaultLoginLimiter.MaxPhoneFailures-1), ipFailures, "a success only returns its own IP attempt")
 }
