@@ -53,6 +53,9 @@ func (u User) Response() UserResponse {
 	}
 }
 
+//The profile columns are nullable, and gorp cannot scan NULL into a string field.
+const userProfileColumns = "id, COALESCE(phone_number, '') AS phone_number, COALESCE(first_name, '') AS first_name, COALESCE(last_name, '') AS last_name, COALESCE(address, '') AS address"
+
 //UserModel ...
 type UserModel struct{}
 
@@ -94,7 +97,7 @@ var authModel = new(AuthModel)
 //Login ...
 func (m UserModel) Login(form forms.LoginFormDto) (user User, token Token, err error) {
 
-	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name, last_name, address, pin FROM public.user WHERE phone_number=LOWER($1) LIMIT 1", form.PhoneNumber)
+	err = db.GetDB().SelectOne(&user, "SELECT "+userProfileColumns+", pin FROM public.user WHERE phone_number=LOWER($1) LIMIT 1", form.PhoneNumber)
 
 	if err != nil {
 		return user, token, err
@@ -243,7 +246,7 @@ func (m UserModel) UpdateProfile(userID string, form forms.UpdateProfileDto) (Us
 
 //One ...
 func (m UserModel) One(userID string) (user User, err error) {
-	err = db.GetDB().SelectOne(&user, "SELECT id, phone_number, first_name, last_name, address, balance FROM public.user WHERE id=$1 LIMIT 1", userID)
+	err = db.GetDB().SelectOne(&user, "SELECT "+userProfileColumns+", balance FROM public.user WHERE id=$1 LIMIT 1", userID)
 	return user, err
 }
 

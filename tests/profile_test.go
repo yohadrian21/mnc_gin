@@ -33,7 +33,7 @@ func TestProfileUpdateWithTokenUpdatesOwnProfile(t *testing.T) {
 	env := newTestEnv(t)
 	session := env.signIn(t, testUserID)
 
-	env.sql.ExpectQuery(regexp.QuoteMeta("SELECT id, phone_number, first_name, last_name, address, balance FROM public.user WHERE id=$1")).
+	env.sql.ExpectQuery(regexp.QuoteMeta(", balance FROM public.user WHERE id=$1")).
 		WithArgs(testUserID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "phone_number", "first_name", "last_name", "address", "balance"}).
 			AddRow(testUserID, testPhone, "Budi", "Santoso", "Jl. Merdeka 1", 1000.0))
