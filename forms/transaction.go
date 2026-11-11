@@ -31,17 +31,34 @@ type CreateTransactionTopUpForm struct {
 	Amount float64 `form:"amount" json:"amount" binding:"required"`
 }
 
-//CreateTransactioForm ...
+//CreateTransactionPaymentForm ...
 type CreateTransactionPaymentForm struct {
-	Amount  float64 `form:"amount" json:"amount" binding:"required"`
+	Amount  float64 `form:"amount" json:"amount" binding:"required,gt=0"`
 	Remarks string  `form:"remarks" json:"remarks" binding:"required"`
 }
 
-//CreateTransactioForm ...
+//CreateTransactionTransferForm ...
 type CreateTransactionTransferForm struct {
 	TargetUser string  `form:"target_user" json:"target_user" binding:"required"`
-	Amount     float64 `form:"amount" json:"amount" binding:"required"`
+	Amount     float64 `form:"amount" json:"amount" binding:"required,gt=0"`
 	Remarks    string  `form:"remarks" json:"remarks" binding:"required"`
+}
+
+//Create maps a binding error on a money request to a client-facing message.
+func (f TransactionForm) Create(err error) string {
+	if validationErrs, ok := err.(validator.ValidationErrors); ok {
+		for _, fieldErr := range validationErrs {
+			switch fieldErr.Field() {
+			case "Amount":
+				return "Please enter an amount greater than zero"
+			case "TargetUser":
+				return "Please enter the target user"
+			case "Remarks":
+				return "Please enter the remarks"
+			}
+		}
+	}
+	return "Invalid request"
 }
 
 //Create ...

@@ -58,20 +58,18 @@ func (ctrl TransactionController) CreateTopUpTransaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction created", "id": id})
 }
 
-//Create Top Up ...
+//CreatePaymentTransaction ...
 func (ctrl TransactionController) CreatePaymentTransaction(c *gin.Context) {
 	userID := getUserID(c)
 
 	var form forms.CreateTransactioForm
 
-	var formdto forms.CreateTransactionTransferForm
-	c.ShouldBindJSON(&formdto)
-
-	// if validationErr := c.ShouldBindJSON(&form); validationErr != nil {
-	// 	message := transactionForm.Create(validationErr)
-	// 	c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": message})
-	// 	return
-	// }
+	var formdto forms.CreateTransactionPaymentForm
+	if validationErr := c.ShouldBindJSON(&formdto); validationErr != nil {
+		message := transactionForm.Create(validationErr)
+		c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": message})
+		return
+	}
 
 	PaymentID := uuid.New().String()
 	form.PaymentID = PaymentID
@@ -87,19 +85,17 @@ func (ctrl TransactionController) CreatePaymentTransaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Transaction created", "id": id})
 }
 
-//Create Top Up ...
+//CreateTransferTransaction ...
 func (ctrl TransactionController) CreateTransferTransaction(c *gin.Context) {
 	userID := getUserID(c)
 
 	var form forms.CreateTransactioForm
 	var formdto forms.CreateTransactionTransferForm
-	c.ShouldBindJSON(&formdto)
-
-	// if validationErr := c.ShouldBindJSON(&form); validationErr != nil {
-	// 	message := transactionForm.Create(validationErr)
-	// 	c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": message})
-	// 	return
-	// }
+	if validationErr := c.ShouldBindJSON(&formdto); validationErr != nil {
+		message := transactionForm.Create(validationErr)
+		c.AbortWithStatusJSON(http.StatusNotAcceptable, gin.H{"message": message})
+		return
+	}
 
 	TransferID := uuid.New().String()
 	form.TransferID = TransferID
