@@ -111,12 +111,8 @@ func (m UserModel) Login(form forms.LoginFormDto) (user User, token Token, err e
 	}
 
 	//Generate the JWT auth token
-	tokenDetails, err := authModel.CreateToken(user.ID)
+	tokenDetails, err := authModel.CreateSession(user.ID)
 	if err != nil {
-		return user, token, err
-	}
-
-	if err = authModel.CreateAuth(user.ID, tokenDetails); err != nil {
 		return user, token, err
 	}
 	token.AccessToken = tokenDetails.AccessToken

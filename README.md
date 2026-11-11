@@ -5,7 +5,8 @@ REST API for a simple e-wallet: register/login with JWT, top up, pay, transfer, 
 **Tech:** Go · Gin · PostgreSQL (gorp) · Redis · JWT (access + refresh) · Docker Compose
 
 ## Features
-- **Auth:** register, login, logout, refresh token. JWTs with access/refresh secrets; token metadata stored in Redis so logout invalidates it.
+- **Auth:** register, login, logout, refresh token. JWTs with access/refresh secrets; each login is a session in Redis that tracks its current access and refresh token, so logout revokes both.
+- **Refresh-token rotation:** `POST /v1/token/refresh` consumes the refresh token and returns a new pair (the previous access token stops working). Presenting an already-used refresh token is treated as theft and revokes the whole session, so a client must store the new refresh token from every refresh.
 - **PIN brute-force protection:** after 5 unsuccessful logins for one phone number, or 20 from one client IP, within 15 minutes, that phone or IP gets `429 Too Many Requests` (with `Retry-After`) for 15 minutes. A successful login clears the phone's count.
 - **Wallet operations** (JWT-protected): `POST /v1/payment`, `POST /v1/transfer`.
 - **Top-ups:** only from the payment provider's signed webhook or an admin, within per-user limits and with an audit trail (see [Top-ups](#top-ups)). Users cannot top up their own wallet.

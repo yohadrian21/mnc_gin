@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Massad/gin-boilerplate/db"
+	"github.com/go-redis/redis/v7"
 	jwt "github.com/golang-jwt/jwt/v4"
 	uuid "github.com/google/uuid"
 )
@@ -19,6 +20,7 @@ type TokenDetails struct {
 	RefreshToken string
 	AccessUUID   string
 	RefreshUUID  string
+	SessionID    string
 	AtExpires    int64
 	RtExpires    int64
 }
@@ -26,7 +28,16 @@ type TokenDetails struct {
 //AccessDetails ...
 type AccessDetails struct {
 	AccessUUID string
+	SessionID  string
 	UserID     string
+}
+
+//RefreshDetails are the verified claims of a refresh token.
+type RefreshDetails struct {
+	RefreshUUID string
+	SessionID   string
+	UserID      string
+	Expires     int64
 }
 
 //Token ...
@@ -37,6 +48,15 @@ type Token struct {
 
 //AuthModel ...
 type AuthModel struct{}
+
+var (
+	//ErrInvalidToken ...
+	ErrInvalidToken = errors.New("invalid token")
+	//ErrRefreshTokenReused is returned when a refresh token is presented after it was already rotated.
+	ErrRefreshTokenReused = errors.New("refresh token was already used")
+	//ErrSessionRevoked is returned when the session was logged out or has expired.
+	ErrSessionRevoked = errors.New("session is no longer active")
+)
 
 const minSecretLength = 32
 
@@ -74,10 +94,30 @@ func checkSecret(name, value string) error {
 	return nil
 }
 
-//CreateToken ...
-func (m AuthModel) CreateToken(userID string) (*TokenDetails, error) {
+//A session is one login. Its Redis hash holds the access and refresh UUIDs currently issued for it,
+//so logout and reuse detection can revoke both tokens.
+func sessionKey(sessionID string) string {
+	return "session:" + sessionID
+}
 
-	td := &TokenDetails{}
+func usedRefreshKey(refreshUUID string) string {
+	return "refresh_used:" + refreshUUID
+}
+
+func hmacKey(secretEnv string) jwt.Keyfunc {
+	return func(token *jwt.Token) (interface{}, error) {
+		//Make sure that the token method conform to "SigningMethodHMAC"
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(os.Getenv(secretEnv)), nil
+	}
+}
+
+//CreateToken ...
+func (m AuthModel) CreateToken(userID, sessionID string) (*TokenDetails, error) {
+
+	td := &TokenDetails{SessionID: sessionID}
 	td.AtExpires = time.Now().Add(time.Minute * 15).Unix()
 	td.AccessUUID = uuid.New().String()
 
@@ -89,6 +129,7 @@ func (m AuthModel) CreateToken(userID string) (*TokenDetails, error) {
 	atClaims := jwt.MapClaims{}
 	atClaims["authorized"] = true
 	atClaims["access_uuid"] = td.AccessUUID
+	atClaims["session_id"] = sessionID
 	atClaims["user_id"] = userID
 	atClaims["exp"] = td.AtExpires
 
@@ -100,11 +141,24 @@ func (m AuthModel) CreateToken(userID string) (*TokenDetails, error) {
 	//Creating Refresh Token
 	rtClaims := jwt.MapClaims{}
 	rtClaims["refresh_uuid"] = td.RefreshUUID
+	rtClaims["session_id"] = sessionID
 	rtClaims["user_id"] = userID
 	rtClaims["exp"] = td.RtExpires
 	rt := jwt.NewWithClaims(jwt.SigningMethodHS256, rtClaims)
 	td.RefreshToken, err = rt.SignedString([]byte(os.Getenv("REFRESH_SECRET")))
 	if err != nil {
+		return nil, err
+	}
+	return td, nil
+}
+
+//CreateSession issues and stores the token pair for a new login.
+func (m AuthModel) CreateSession(userID string) (*TokenDetails, error) {
+	td, err := m.CreateToken(userID, uuid.New().String())
+	if err != nil {
+		return nil, err
+	}
+	if err := m.CreateAuth(userID, td); err != nil {
 		return nil, err
 	}
 	return td, nil
@@ -116,15 +170,98 @@ func (m AuthModel) CreateAuth(userid string, td *TokenDetails) error {
 	rt := time.Unix(td.RtExpires, 0)
 	now := time.Now()
 
-	errAccess := db.GetRedis().Set(td.AccessUUID, userid, at.Sub(now)).Err()
-	if errAccess != nil {
-		return errAccess
+	_, err := db.GetRedis().TxPipelined(func(pipe redis.Pipeliner) error {
+		pipe.Set(td.AccessUUID, userid, at.Sub(now))
+		pipe.Set(td.RefreshUUID, userid, rt.Sub(now))
+		pipe.HSet(sessionKey(td.SessionID), "access_uuid", td.AccessUUID, "refresh_uuid", td.RefreshUUID)
+		pipe.Expire(sessionKey(td.SessionID), rt.Sub(now))
+		return nil
+	})
+	return err
+}
+
+//rotateSession consumes a refresh token and installs the next token pair in one step, so a
+//concurrent logout or a second use of the same refresh token cannot slip in between.
+//Returns 0 when rotated, 1 when the refresh token is no longer live, 2 when it was already used.
+var rotateSession = redis.NewScript(`
+if not redis.call('SET', KEYS[3], ARGV[1], 'NX', 'EX', ARGV[3]) then return 2 end
+if redis.call('DEL', KEYS[2]) == 0 then return 1 end
+local previous = redis.call('HGET', KEYS[1], 'access_uuid')
+if previous then redis.call('DEL', previous) end
+redis.call('SET', KEYS[4], ARGV[2], 'EX', ARGV[4])
+redis.call('SET', KEYS[5], ARGV[2], 'EX', ARGV[5])
+redis.call('HSET', KEYS[1], 'access_uuid', KEYS[4], 'refresh_uuid', KEYS[5])
+redis.call('EXPIRE', KEYS[1], ARGV[5])
+return 0
+`)
+
+var revokeSession = redis.NewScript(`
+local tokens = redis.call('HMGET', KEYS[1], 'access_uuid', 'refresh_uuid')
+for _, key in ipairs(tokens) do
+  if key then redis.call('DEL', key) end
+end
+return redis.call('DEL', KEYS[1])
+`)
+
+//RotateSession exchanges a refresh token for a new token pair in the same session. Presenting a
+//refresh token a second time means it leaked, so the whole session is revoked.
+func (m AuthModel) RotateSession(rd *RefreshDetails) (*TokenDetails, error) {
+	td, err := m.CreateToken(rd.UserID, rd.SessionID)
+	if err != nil {
+		return nil, err
 	}
-	errRefresh := db.GetRedis().Set(td.RefreshUUID, userid, rt.Sub(now)).Err()
-	if errRefresh != nil {
-		return errRefresh
+	now := time.Now()
+	result, err := rotateSession.Run(db.GetRedis(),
+		[]string{sessionKey(rd.SessionID), rd.RefreshUUID, usedRefreshKey(rd.RefreshUUID), td.AccessUUID, td.RefreshUUID},
+		rd.SessionID, rd.UserID,
+		wholeSeconds(time.Unix(rd.Expires, 0).Sub(now)),
+		wholeSeconds(time.Unix(td.AtExpires, 0).Sub(now)),
+		wholeSeconds(time.Unix(td.RtExpires, 0).Sub(now)),
+	).Int64()
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	switch result {
+	case 0:
+		return td, nil
+	case 2:
+		if err := m.RevokeSession(rd.SessionID); err != nil {
+			return nil, err
+		}
+		return nil, ErrRefreshTokenReused
+	default:
+		return nil, ErrSessionRevoked
+	}
+}
+
+//RevokeSession deletes the session's current access and refresh UUIDs, so neither token works again.
+func (m AuthModel) RevokeSession(sessionID string) error {
+	return revokeSession.Run(db.GetRedis(), []string{sessionKey(sessionID)}).Err()
+}
+
+//ParseRefreshToken verifies a refresh token and returns its claims.
+func (m AuthModel) ParseRefreshToken(tokenString string) (*RefreshDetails, error) {
+	token, err := jwt.Parse(tokenString, hmacKey("REFRESH_SECRET"))
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid || !claims.VerifyExpiresAt(time.Now().Unix(), true) {
+		return nil, ErrInvalidToken
+	}
+	refreshUUID, _ := claims["refresh_uuid"].(string)
+	sessionID, _ := claims["session_id"].(string)
+	userID, _ := claims["user_id"].(string)
+	expires, _ := claims["exp"].(float64)
+	if refreshUUID == "" || sessionID == "" || userID == "" {
+		return nil, ErrInvalidToken
+	}
+	return &RefreshDetails{
+		RefreshUUID: refreshUUID,
+		SessionID:   sessionID,
+		UserID:      userID,
+		Expires:     int64(expires),
+	}, nil
 }
 
 //ExtractToken ...
@@ -141,13 +278,7 @@ func (m AuthModel) ExtractToken(r *http.Request) string {
 //VerifyToken ...
 func (m AuthModel) VerifyToken(r *http.Request) (*jwt.Token, error) {
 	tokenString := m.ExtractToken(r)
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		//Make sure that the token method conform to "SigningMethodHMAC"
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(os.Getenv("ACCESS_SECRET")), nil
-	})
+	token, err := jwt.Parse(tokenString, hmacKey("ACCESS_SECRET"))
 	if err != nil {
 		return nil, err
 	}
@@ -173,22 +304,20 @@ func (m AuthModel) ExtractTokenMetadata(r *http.Request) (*AccessDetails, error)
 		return nil, err
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
-	if ok && token.Valid {
-		accessUUID, ok := claims["access_uuid"].(string)
-		if !ok {
-			return nil, err
-		}
-		// userID, err := strconv.ParseInt(fmt.Sprintf("%.f", claims["user_id"]), 10, 64)
-		// if err != nil {
-		// 	return nil, err
-		// }
-		userID := fmt.Sprintf("%.f", claims["user_id"])
-		return &AccessDetails{
-			AccessUUID: accessUUID,
-			UserID:     userID,
-		}, nil
+	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
 	}
-	return nil, err
+	accessUUID, _ := claims["access_uuid"].(string)
+	sessionID, _ := claims["session_id"].(string)
+	userID, _ := claims["user_id"].(string)
+	if accessUUID == "" || sessionID == "" {
+		return nil, ErrInvalidToken
+	}
+	return &AccessDetails{
+		AccessUUID: accessUUID,
+		SessionID:  sessionID,
+		UserID:     userID,
+	}, nil
 }
 
 //FetchAuth ...

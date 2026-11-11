@@ -107,8 +107,12 @@ func (ctrl UserController) Logout(c *gin.Context) {
 		return
 	}
 
-	deleted, delErr := authModel.DeleteAuth(au.AccessUUID)
-	if delErr != nil || deleted == 0 { //if any goes wrong
+	if _, err := authModel.FetchAuth(au); err != nil { //already logged out or expired
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "Invalid request"})
+		return
+	}
+
+	if err := authModel.RevokeSession(au.SessionID); err != nil {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"message": "Invalid request"})
 		return
 	}

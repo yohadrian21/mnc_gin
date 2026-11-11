@@ -1,14 +1,13 @@
 package controllers
 
 import (
-	"fmt"
+	"errors"
+	"log"
 	"net/http"
-	"os"
-	
+
 	"github.com/Massad/gin-boilerplate/forms"
 	"github.com/Massad/gin-boilerplate/models"
 	"github.com/gin-gonic/gin"
-	jwt "github.com/golang-jwt/jwt/v4"
 )
 
 //AuthController ...
@@ -57,59 +56,26 @@ func (ctl AuthController) Refresh(c *gin.Context) {
 		return
 	}
 
-	//verify the token
-	token, err := jwt.Parse(tokenForm.RefreshToken, func(token *jwt.Token) (interface{}, error) {
-		//Make sure that the token method conform to "SigningMethodHMAC"
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return []byte(os.Getenv("REFRESH_SECRET")), nil
-	})
-	//if there is an error, the token must have expired
+	//verify the token; if there is an error, it is forged, expired or missing its claims
+	refresh, err := authModel.ParseRefreshToken(tokenForm.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
 		return
 	}
-	//is token valid?
-	if _, ok := token.Claims.(jwt.Claims); !ok && !token.Valid {
+
+	//Consume the refresh token and create the next pair of refresh and access tokens
+	ts, err := authModel.RotateSession(refresh)
+	if errors.Is(err, models.ErrRefreshTokenReused) {
+		log.Printf("security: refresh token reused for user %s; session %s revoked", refresh.UserID, refresh.SessionID)
+	}
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
 		return
 	}
-	//Since token is valid, get the uuid:
-	claims, ok := token.Claims.(jwt.MapClaims) //the token claims should conform to MapClaims
-	if ok && token.Valid {
-		refreshUUID, ok := claims["refresh_uuid"].(string) //convert the interface to string
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
-			return
-		}
-		userID:= fmt.Sprintf("%.f", claims["user_id"])
-		
-		//Delete the previous Refresh Token
-		deleted, delErr := authModel.DeleteAuth(refreshUUID)
-		if delErr != nil || deleted == 0 { //if any goes wrong
-			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
-			return
-		}
 
-		//Create new pairs of refresh and access tokens
-		ts, createErr := authModel.CreateToken(userID)
-		if createErr != nil {
-			c.JSON(http.StatusForbidden, gin.H{"message": "Invalid authorization, please login again"})
-			return
-		}
-		//save the tokens metadata to redis
-		saveErr := authModel.CreateAuth(userID, ts)
-		if saveErr != nil {
-			c.JSON(http.StatusForbidden, gin.H{"message": "Invalid authorization, please login again"})
-			return
-		}
-		tokens := map[string]string{
-			"access_token":  ts.AccessToken,
-			"refresh_token": ts.RefreshToken,
-		}
-		c.JSON(http.StatusOK, tokens)
-	} else {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid authorization, please login again"})
+	tokens := map[string]string{
+		"access_token":  ts.AccessToken,
+		"refresh_token": ts.RefreshToken,
 	}
+	c.JSON(http.StatusOK, tokens)
 }

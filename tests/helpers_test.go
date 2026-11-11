@@ -95,9 +95,8 @@ func bearer(token string) http.Header {
 // signIn creates a session for userID the same way a successful PIN login does.
 func (e *testEnv) signIn(t *testing.T, userID string) *models.TokenDetails {
 	t.Helper()
-	td, err := testAuthModel.CreateToken(userID)
+	td, err := testAuthModel.CreateSession(userID)
 	require.NoError(t, err)
-	require.NoError(t, testAuthModel.CreateAuth(userID, td))
 	return td
 }
 
