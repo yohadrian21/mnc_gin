@@ -14,13 +14,20 @@ REST API for a simple e-wallet: register/login with JWT, top up, pay, transfer, 
 
 ## Run locally
 ```bash
-cp .env_copy .env            # adjust DB / Redis / JWT secrets
+cp .env_copy .env            # adjust DB / Redis, replace every CHANGE_ME secret (see below)
 docker compose up -d         # PostgreSQL + Redis
 psql -U postgres -h localhost < db/database.sql
 psql -U postgres -h localhost golang_gin_db < db/example_data.sql   # optional
 go run .
 ```
 Set `SSL=FALSE` in `.env` unless you generated certs with `generate-certificate.sh`.
+
+## Secrets
+`.env_copy` is public and holds placeholders only. The server refuses to start if `ACCESS_SECRET` or `REFRESH_SECRET` is missing, still starts with `CHANGE_ME`, is shorter than 32 characters, or both are the same value.
+
+- Generate each secret separately for every environment from at least 32 random bytes, e.g. `openssl rand -base64 48`. Do not share a value between environments or between `ACCESS_SECRET` and `REFRESH_SECRET`.
+- Keep real values in `.env` (git-ignored) or your deployment's secret store, never in the repository.
+- Earlier versions of `.env_copy` committed concrete values for `ACCESS_SECRET`, `REFRESH_SECRET` and `REDIS_SECRET`. They stay in git history, so treat them as public: rotate any secret that was copied from this file. Rotating the JWT secrets invalidates all issued tokens, so users must log in again.
 
 ## API
 | Method | Path | Auth |

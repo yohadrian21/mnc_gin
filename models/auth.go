@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -36,6 +37,38 @@ type Token struct {
 
 //AuthModel ...
 type AuthModel struct{}
+
+const minSecretLength = 32
+
+//placeholderSecretPrefix marks the sample values in .env_copy.
+const placeholderSecretPrefix = "CHANGE_ME"
+
+//ValidateSecrets refuses missing, placeholder, short or shared JWT signing secrets.
+func ValidateSecrets() error {
+	access, refresh := os.Getenv("ACCESS_SECRET"), os.Getenv("REFRESH_SECRET")
+	if err := checkSecret("ACCESS_SECRET", access); err != nil {
+		return err
+	}
+	if err := checkSecret("REFRESH_SECRET", refresh); err != nil {
+		return err
+	}
+	if access == refresh {
+		return errors.New("ACCESS_SECRET and REFRESH_SECRET must be different")
+	}
+	return nil
+}
+
+func checkSecret(name, value string) error {
+	switch {
+	case value == "":
+		return fmt.Errorf("%s is not set", name)
+	case strings.HasPrefix(value, placeholderSecretPrefix):
+		return fmt.Errorf("%s still holds the placeholder from .env_copy; generate one with: openssl rand -base64 48", name)
+	case len(value) < minSecretLength:
+		return fmt.Errorf("%s must be at least %d characters; generate one with: openssl rand -base64 48", name, minSecretLength)
+	}
+	return nil
+}
 
 //CreateToken ...
 func (m AuthModel) CreateToken(userID string) (*TokenDetails, error) {

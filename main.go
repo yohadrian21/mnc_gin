@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/Massad/gin-boilerplate/db"
+	"github.com/Massad/gin-boilerplate/models"
 	"github.com/Massad/gin-boilerplate/router"
 	"github.com/joho/godotenv"
 
@@ -18,6 +19,10 @@ func main() {
 	err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal("error: failed to load the env file")
+	}
+
+	if err := models.ValidateSecrets(); err != nil {
+		log.Fatal("error: ", err)
 	}
 
 	if os.Getenv("ENV") == "PRODUCTION" {
